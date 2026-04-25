@@ -1,7 +1,15 @@
 import readline from "node:readline";
 
 // ---- 初期データ ----
-const BOOKS = [
+interface Book {
+  id: number;
+  title: string;
+  price: number;
+  category: string;
+  stock: number;
+}
+
+const BOOKS: Book[] = [
   {
     id: 1,
     title: "JavaScript 入門",
@@ -20,17 +28,31 @@ const BOOKS = [
   { id: 4, title: "デザイン入門", price: 1600, category: "Design", stock: 2 },
 ];
 
+interface PercentCoupon {
+  type: "percent";
+  code: string;
+  percent: number;
+}
+
+interface FixedCoupon {
+  type: "fixed";
+  code: string;
+  amount: number;
+}
+
+type Coupon = PercentCoupon | FixedCoupon;
+
 // 利用可能クーポン
-const COUPON_DB = {
+const COUPON_DB: { [key: string]: Coupon } = {
   TS10: { type: "percent", code: "TS10", percent: 10 }, // 10%OFF
   SAVE500: { type: "fixed", code: "SAVE500", amount: 500 }, // 500円引き
 };
 
 // ---- ユーティリティ ----
-function formatYen(n) {
+function formatYen(n: number): string {
   return `¥${Number(n).toLocaleString("ja-JP")}`;
 }
-function prompt(rl, q) {
+function prompt(rl: readline.Interface, q: string): Promise<T> {
   return new Promise((resolve) => rl.question(q, resolve));
 }
 function calcDiscount(price, coupon) {
@@ -41,8 +63,31 @@ function calcDiscount(price, coupon) {
   return 0;
 }
 
+interface CartItem {
+  title: string;
+  paid: number;
+  original: number;
+  couponCode?: string;
+}
+
+interface HistoryItem {
+  title: string;
+  paid: number;
+  discount: number;
+  couponCode?: string;
+  date: string;
+}
+
+interface State {
+  balance: number;
+  cart: CartItem[];
+  history: HistoryItem[];
+  activeCoupon: null | Coupon;
+  usedCoupons: string[];
+}
+
 // ---- セッション状態 ----
-const state = {
+const state: State = {
   balance: 0, // 残高
   cart: [], // { title, paid, original, couponCode? }
   history: [], // { title, paid, discount, couponCode?, date }
@@ -67,7 +112,7 @@ async function mainMenu(rl) {
 async function charge(rl) {
   console.log(`現在の残高: ${formatYen(state.balance)}`);
   const amount = Number(
-    await prompt(rl, "チャージする金額を入力してください: ")
+    await prompt(rl, "チャージする金額を入力してください: "),
   );
   if (Number.isInteger(amount) && amount > 0) {
     state.balance += amount;
@@ -92,12 +137,12 @@ function showCart() {
       : "";
     console.log(
       `${idx + 1}. ${item.title}  支払: ${formatYen(
-        item.paid
-      )} / 定価: ${formatYen(item.original)} ${couponInfo}`
+        item.paid,
+      )} / 定価: ${formatYen(item.original)} ${couponInfo}`,
     );
   });
   console.log(
-    `合計支払額: ${formatYen(total)} / 残高: ${formatYen(state.balance)}`
+    `合計支払額: ${formatYen(total)} / 残高: ${formatYen(state.balance)}`,
   );
   if (state.activeCoupon)
     console.log(`適用待ちのクーポン: ${state.activeCoupon.code}`);
@@ -115,7 +160,7 @@ async function purchase(rl) {
     console.log(
       `${i + 1}. ${b.title} [${formatYen(b.price)} | ${b.category}] (在庫:${
         b.stock
-      })`
+      })`,
     );
   });
 
@@ -132,8 +177,8 @@ async function purchase(rl) {
   if (state.balance < priceToPay) {
     console.log(
       `残高が不足しています（必要: ${formatYen(priceToPay)} / 残高: ${formatYen(
-        state.balance
-      )}）。チャージしてください。`
+        state.balance,
+      )}）。チャージしてください。`,
     );
     return;
   }
@@ -165,8 +210,8 @@ async function purchase(rl) {
   const discountMsg = discount > 0 ? `（割引 ${formatYen(discount)}）` : "";
   console.log(
     `${book.title}を購入しました！ 支払: ${formatYen(
-      priceToPay
-    )} ${discountMsg} / 残高: ${formatYen(state.balance)}`
+      priceToPay,
+    )} ${discountMsg} / 残高: ${formatYen(state.balance)}`,
   );
 }
 
@@ -181,8 +226,8 @@ function showHistory() {
     const couponInfo = h.couponCode ? ` / クーポン:${h.couponCode}` : "";
     console.log(
       `${i + 1}. ${h.title}  支払:${formatYen(h.paid)} / 割引:${formatYen(
-        h.discount
-      )}  ${h.date}${couponInfo}`
+        h.discount,
+      )}  ${h.date}${couponInfo}`,
     );
   });
 }

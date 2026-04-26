@@ -30,23 +30,23 @@ const BOOKS: Book[] = [
 
 interface PercentCoupon {
   type: "percent";
-  code: string;
+  code: "TS10";
   percent: number;
 }
 
 interface FixedCoupon {
   type: "fixed";
-  code: string;
+  code: "SAVE500";
   amount: number;
 }
 
 type Coupon = PercentCoupon | FixedCoupon;
 
 // 利用可能クーポン
-const COUPON_DB: { [key: string]: Coupon } = {
+const COUPON_DB = {
   TS10: { type: "percent", code: "TS10", percent: 10 }, // 10%OFF
   SAVE500: { type: "fixed", code: "SAVE500", amount: 500 }, // 500円引き
-};
+} as const;
 
 // ---- ユーティリティ ----
 function formatYen(n: number): string {
@@ -235,12 +235,17 @@ function showHistory(): void {
   });
 }
 
+function isCouponCode(code: string): code is keyof typeof COUPON_DB {
+  return code in COUPON_DB;
+}
+
 // ---- 5. クーポン適用 ----
 async function applyCoupon(rl: readline.Interface): Promise<void> {
   console.log("利用可能なクーポン例: TS10（10%OFF）, SAVE500（500円引き）");
   const code = String(await prompt(rl, "クーポンコードを入力してください: "))
     .trim()
     .toUpperCase();
+  if (!isCouponCode(code)) return;
   const c = COUPON_DB[code];
   if (!c) {
     console.log("クーポンが見つかりません。");

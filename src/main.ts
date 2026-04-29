@@ -1,7 +1,15 @@
 import readline from "node:readline";
 
 // ---- 初期データ ----
-const BOOKS = [
+interface Book {
+  id: number;
+  title: string;
+  price: number;
+  category: string;
+  stock: number;
+}
+
+const BOOKS: Book[] = [
   {
     id: 1,
     title: "JavaScript 入門",
@@ -20,20 +28,34 @@ const BOOKS = [
   { id: 4, title: "デザイン入門", price: 1600, category: "Design", stock: 2 },
 ];
 
+interface PercentCoupon {
+  type: "percent";
+  code: "TS10";
+  percent: number;
+}
+
+interface FixedCoupon {
+  type: "fixed";
+  code: "SAVE500";
+  amount: number;
+}
+
+type Coupon = PercentCoupon | FixedCoupon;
+
 // 利用可能クーポン
 const COUPON_DB = {
   TS10: { type: "percent", code: "TS10", percent: 10 }, // 10%OFF
   SAVE500: { type: "fixed", code: "SAVE500", amount: 500 }, // 500円引き
-};
+} as const;
 
 // ---- ユーティリティ ----
-function formatYen(n) {
+function formatYen(n: number): string {
   return `¥${Number(n).toLocaleString("ja-JP")}`;
 }
-function prompt(rl, q) {
+function prompt(rl: readline.Interface, q: string): Promise<string> {
   return new Promise((resolve) => rl.question(q, resolve));
 }
-function calcDiscount(price, coupon) {
+function calcDiscount(price: number, coupon: null | Coupon): number {
   if (!coupon) return 0;
   if (coupon.type === "percent")
     return Math.floor((price * coupon.percent) / 100);
@@ -41,8 +63,31 @@ function calcDiscount(price, coupon) {
   return 0;
 }
 
+interface CartItem {
+  title: string;
+  paid: number;
+  original: number;
+  couponCode?: string;
+}
+
+interface HistoryItem {
+  title: string;
+  paid: number;
+  discount: number;
+  couponCode?: string;
+  date: string;
+}
+
+interface State {
+  balance: number;
+  cart: CartItem[];
+  history: HistoryItem[];
+  activeCoupon: null | Coupon;
+  usedCoupons: string[];
+}
+
 // ---- セッション状態 ----
-const state = {
+const state: State = {
   balance: 0, // 残高
   cart: [], // { title, paid, original, couponCode? }
   history: [], // { title, paid, discount, couponCode?, date }
@@ -51,7 +96,7 @@ const state = {
 };
 
 // ---- メニュー ----
-async function mainMenu(rl) {
+async function mainMenu(rl: readline.Interface): Promise<number> {
   console.log("\nどのアクションを行いますか？");
   console.log("1. お金をチャージする");
   console.log("2. カートを確認する");
@@ -64,10 +109,10 @@ async function mainMenu(rl) {
 }
 
 // ---- 1. チャージ ----
-async function charge(rl) {
+async function charge(rl: readline.Interface): Promise<void> {
   console.log(`現在の残高: ${formatYen(state.balance)}`);
   const amount = Number(
-    await prompt(rl, "チャージする金額を入力してください: ")
+    await prompt(rl, "チャージする金額を入力してください: "),
   );
   if (Number.isInteger(amount) && amount > 0) {
     state.balance += amount;
@@ -78,7 +123,7 @@ async function charge(rl) {
 }
 
 // ---- 2. カート表示 ----
-function showCart() {
+function showCart(): void {
   if (state.cart.length === 0) {
     console.log("カートは空です。");
     return;
@@ -92,19 +137,19 @@ function showCart() {
       : "";
     console.log(
       `${idx + 1}. ${item.title}  支払: ${formatYen(
-        item.paid
-      )} / 定価: ${formatYen(item.original)} ${couponInfo}`
+        item.paid,
+      )} / 定価: ${formatYen(item.original)} ${couponInfo}`,
     );
   });
   console.log(
-    `合計支払額: ${formatYen(total)} / 残高: ${formatYen(state.balance)}`
+    `合計支払額: ${formatYen(total)} / 残高: ${formatYen(state.balance)}`,
   );
   if (state.activeCoupon)
     console.log(`適用待ちのクーポン: ${state.activeCoupon.code}`);
 }
 
 // ---- 3. 購入 ----
-async function purchase(rl) {
+async function purchase(rl: readline.Interface): Promise<void> {
   const list = BOOKS.filter((b) => b.stock > 0);
   if (list.length === 0) {
     console.log("すべて売り切れです。");
@@ -115,7 +160,7 @@ async function purchase(rl) {
     console.log(
       `${i + 1}. ${b.title} [${formatYen(b.price)} | ${b.category}] (在庫:${
         b.stock
-      })`
+      })`,
     );
   });
 
@@ -126,14 +171,17 @@ async function purchase(rl) {
   }
 
   const book = list[ans - 1];
+  if (book === undefined) {
+    return;
+  }
   const discount = calcDiscount(book.price, state.activeCoupon);
   const priceToPay = Math.max(0, book.price - discount);
 
   if (state.balance < priceToPay) {
     console.log(
       `残高が不足しています（必要: ${formatYen(priceToPay)} / 残高: ${formatYen(
-        state.balance
-      )}）。チャージしてください。`
+        state.balance,
+      )}）。チャージしてください。`,
     );
     return;
   }
@@ -149,13 +197,13 @@ async function purchase(rl) {
     title: book.title,
     paid: priceToPay,
     original: book.price,
-    couponCode: usedCode || undefined,
+    ...(usedCode ? { couponCode: usedCode } : {}),
   });
   state.history.push({
     title: book.title,
     paid: priceToPay,
     discount,
-    couponCode: usedCode || undefined,
+    ...(usedCode ? { couponCode: usedCode } : {}),
     date: new Date().toLocaleString(),
   });
 
@@ -165,13 +213,13 @@ async function purchase(rl) {
   const discountMsg = discount > 0 ? `（割引 ${formatYen(discount)}）` : "";
   console.log(
     `${book.title}を購入しました！ 支払: ${formatYen(
-      priceToPay
-    )} ${discountMsg} / 残高: ${formatYen(state.balance)}`
+      priceToPay,
+    )} ${discountMsg} / 残高: ${formatYen(state.balance)}`,
   );
 }
 
 // ---- 4. 購入履歴 ----
-function showHistory() {
+function showHistory(): void {
   if (state.history.length === 0) {
     console.log("まだ購入履歴がありません。");
     return;
@@ -181,18 +229,23 @@ function showHistory() {
     const couponInfo = h.couponCode ? ` / クーポン:${h.couponCode}` : "";
     console.log(
       `${i + 1}. ${h.title}  支払:${formatYen(h.paid)} / 割引:${formatYen(
-        h.discount
-      )}  ${h.date}${couponInfo}`
+        h.discount,
+      )}  ${h.date}${couponInfo}`,
     );
   });
 }
 
+function isCouponCode(code: string): code is keyof typeof COUPON_DB {
+  return code in COUPON_DB;
+}
+
 // ---- 5. クーポン適用 ----
-async function applyCoupon(rl) {
+async function applyCoupon(rl: readline.Interface): Promise<void> {
   console.log("利用可能なクーポン例: TS10（10%OFF）, SAVE500（500円引き）");
   const code = String(await prompt(rl, "クーポンコードを入力してください: "))
     .trim()
     .toUpperCase();
+  if (!isCouponCode(code)) return;
   const c = COUPON_DB[code];
   if (!c) {
     console.log("クーポンが見つかりません。");
@@ -207,7 +260,7 @@ async function applyCoupon(rl) {
 }
 
 // ---- エントリーポイント ----
-async function main() {
+async function main(): Promise<void> {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
